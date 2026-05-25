@@ -1,0 +1,24 @@
+{
+  "name": "Space Shooter",
+  "short_name": "Space Shooter",
+  "description": "Space shooter game with 100 levels, guns and upgrades",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#000011",
+  "theme_color": "#000011",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

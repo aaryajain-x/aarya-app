@@ -3,35 +3,27 @@ const W = 360, H = 640;
 
 // ─── 100-level generator ──────────────────────────────────────────────────────
 function generateLevels() {
+  // Smooth continuous curve — every level feels different from the last
+  // enemies 3→35, speed 55→340, shootRate 5500→380 (exponential), rows 1→5
+  // Boss every 10 levels (1-50), every 5 levels (51-100), Level 100 = FINAL BOSS
+  const BASE = Math.log(380 / 5500); // for exponential shootRate curve
   const lvls = [];
   for (let i = 0; i < 100; i++) {
     const n = i + 1;
-    let enemies, speed, shootRate, rows, boss, bossHp;
+    const t = i / 99; // 0 → 1 across all 100 levels
 
-    if (n <= 50) {
-      // Easy → Medium  (levels 1-50)
-      const t  = i / 49;
-      enemies   = Math.round(4  + t * 18);       // 4  → 22
-      speed     = Math.round(60 + t * 100);       // 60 → 160
-      shootRate = Math.round(5000 - t * 3700);    // 5000 → 1300
-      rows      = 1 + Math.min(2, Math.floor(t * 3));
-      boss      = n % 10 === 0;
-      bossHp    = 8 + Math.floor(n / 10) * 4;    // 8, 12, 16, 20, 24
+    const enemies   = Math.round(3 + t * 32);                           // 3  → 35
+    const speed     = Math.round(55 + t * 285);                         // 55 → 340
+    const shootRate = Math.max(380, Math.round(5500 * Math.exp(BASE * t))); // 5500 → 380 (exp)
+    const rows      = 1 + Math.min(4, Math.floor(t * 5.2));             // 1  → 5
+    const boss      = (n <= 50) ? (n % 10 === 0) : (n % 5 === 0);
+    const bossHp    = Math.round(8 + t * 72);                           // 8  → 80
+
+    if (n === 100) {
+      lvls.push({ enemies: 15, speed: 345, shootRate: 380, rows: 3, boss: true, bossHp: 80 });
     } else {
-      // Hard → Extreme  (levels 51-100) — starts where level 5 used to be
-      const t  = (i - 50) / 49;
-      enemies   = Math.round(10 + t * 26);        // 10 → 36
-      speed     = Math.round(160 + t * 165);      // 160 → 325
-      shootRate = Math.round(1200 - t * 810);     // 1200 → 390
-      rows      = 2 + Math.min(3, Math.floor(t * 4));
-      boss      = n % 5 === 0;
-      bossHp    = 25 + Math.floor((n - 50) / 5) * 5; // 25 → 75
+      lvls.push({ enemies, speed, shootRate, rows, boss, bossHp });
     }
-
-    // Level 100 — FINAL BOSS
-    if (n === 100) { enemies = 12; speed = 340; shootRate = 370; rows = 3; boss = true; bossHp = 80; }
-
-    lvls.push({ enemies, speed, shootRate, rows, boss, bossHp });
   }
   return lvls;
 }
@@ -405,12 +397,17 @@ class GameScene extends Phaser.Scene {
   }
 
   create() {
-    // Scrolling star field
-    this.stars = Array.from({ length: 100 }, () => ({
-      x: Phaser.Math.Between(0, W), y: Phaser.Math.Between(0, H),
-      speed: Math.random() * 1.5 + 0.5, r: Math.random() * 1.5 + 0.3,
-    }));
-    this.starGfx = this.add.graphics();
+    // Scrolling star field — pre-rendered tile sprite (no per-frame drawing)
+    if (!this.textures.exists('starfield')) {
+      const sg = this.add.graphics();
+      for (let i = 0; i < 150; i++) {
+        sg.fillStyle(0xffffff, Math.random() * 0.75 + 0.2);
+        sg.fillCircle(Phaser.Math.Between(0, W), Phaser.Math.Between(0, H * 2), Math.random() * 1.5 + 0.2);
+      }
+      sg.generateTexture('starfield', W, H * 2);
+      sg.destroy();
+    }
+    this.starfield = this.add.tileSprite(0, 0, W, H, 'starfield').setOrigin(0, 0).setDepth(0);
 
     const cfg = getScaledConfig(this.currentLevel, this.wave);
 
@@ -448,14 +445,8 @@ class GameScene extends Phaser.Scene {
   update(_, delta) {
     if (this.isPaused) return;
 
-    // Scroll stars
-    this.starGfx.clear();
-    this.stars.forEach(s => {
-      s.y += s.speed;
-      if (s.y > H) s.y = 0;
-      this.starGfx.fillStyle(0xffffff, 0.6);
-      this.starGfx.fillCircle(s.x, s.y, s.r);
-    });
+    // Scroll star tile sprite (one call vs 100 draw calls)
+    this.starfield.tilePositionY -= 0.9;
 
     // Shield ring follows player
     if (this.shieldRing && this.player) {
@@ -941,11 +932,17 @@ class GameOverScene extends Phaser.Scene {
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 function makeStars(scene) {
-  const g = scene.add.graphics();
-  for (let i = 0; i < 80; i++) {
-    g.fillStyle(0xffffff, Math.random() * 0.7 + 0.2);
-    g.fillCircle(Phaser.Math.Between(0, W), Phaser.Math.Between(0, H), Math.random() * 2 + 0.4);
+  const key = 'menuStars';
+  if (!scene.textures.exists(key)) {
+    const g = scene.add.graphics();
+    for (let i = 0; i < 100; i++) {
+      g.fillStyle(0xffffff, Math.random() * 0.7 + 0.2);
+      g.fillCircle(Phaser.Math.Between(0, W), Phaser.Math.Between(0, H), Math.random() * 2 + 0.3);
+    }
+    g.generateTexture(key, W, H);
+    g.destroy();
   }
+  scene.add.image(0, 0, key).setOrigin(0, 0);
 }
 
 function makeBtn(scene, x, y, label, color, cb, w = 220) {
