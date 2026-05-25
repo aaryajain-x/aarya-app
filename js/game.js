@@ -423,6 +423,16 @@ class GameScene extends Phaser.Scene {
 
     this._buildHUD();
 
+    // Safety net: if boss dies & enemies are gone but _levelCleared wasn't triggered, force it
+    this.time.addEvent({
+      delay: 500, loop: true, callbackScope: this,
+      callback: () => {
+        if (!this._cleared && !this._over && !this.boss && this.enemies.getLength() === 0) {
+          this._levelCleared();
+        }
+      }
+    });
+
     // Touch/drag movement
     this.input.on('pointermove', p => { if (p.isDown && this.player) this.player.x = Phaser.Math.Clamp(p.x, 22, W - 22); });
     this.input.on('pointerdown', p => { if (this.player) this.player.x = Phaser.Math.Clamp(p.x, 22, W - 22); });
@@ -486,9 +496,9 @@ class GameScene extends Phaser.Scene {
       if (e.active && e.y > H - 55) { this._playerHit(null); if (e.active) e.destroy(); }
     });
 
-    // Clean off-screen bullets
+    // Clean off-screen bullets (kill tween first to avoid stale-tween errors)
     [...this.bullets.getChildren(), ...this.eBullets.getChildren()].forEach(b => {
-      if (b.active && (b.y < -50 || b.y > H + 50)) b.destroy();
+      if (b.active && (b.y < -50 || b.y > H + 50)) { this.tweens.killTweensOf(b); b.destroy(); }
     });
 
     // Boss sway
@@ -599,7 +609,7 @@ class GameScene extends Phaser.Scene {
     this.add.text(W/2, 28, 'BOSS', { fontSize: '10px', fill: '#fff', fontFamily: 'Arial' }).setOrigin(0.5).setDepth(11);
     // Fire rate scales with level — level 10 ≈ 2500ms, level 100 ≈ 900ms
     const bossFireDelay = Math.max(900, Math.round(this.levelCfg.shootRate * 0.55));
-    this.time.addEvent({ delay: bossFireDelay, callback: this._bossFire, callbackScope: this, loop: true });
+    this.bossFireTimer = this.time.addEvent({ delay: bossFireDelay, callback: this._bossFire, callbackScope: this, loop: true });
   }
 
   _buildHUD() {
@@ -730,7 +740,7 @@ class GameScene extends Phaser.Scene {
   // ── Hit handlers ───────────────────────────────────────────────────────────
   _hitEnemy(bullet, enemy) {
     if (!bullet.active || !enemy.active) return;
-    bullet.destroy(); enemy.destroy();
+    this.tweens.killTweensOf(bullet); bullet.destroy(); enemy.destroy();
     this._onKill(enemy.x, enemy.y, 0xff8800);
   }
 
@@ -747,7 +757,7 @@ class GameScene extends Phaser.Scene {
     if (!bullet.active || bullet._exploded) return;
     bullet._exploded = true;
     const rx = firstEnemy.x, ry = firstEnemy.y;
-    bullet.destroy();
+    this.tweens.killTweensOf(bullet); bullet.destroy();
     this.enemies.getChildren().slice().forEach(e => {
       if (!e.active) return;
       const dx = e.x - rx, dy = e.y - ry;
@@ -762,7 +772,7 @@ class GameScene extends Phaser.Scene {
 
   _hitBoss(bullet) {
     if (!bullet.active || !this.boss) return;
-    if (!bullet.pierce) bullet.destroy();
+    if (!bullet.pierce) { this.tweens.killTweensOf(bullet); bullet.destroy(); }
     // Save position BEFORE _updateBossHP() — it may null out this.boss
     const bx = this.boss.x + Phaser.Math.Between(-25, 25);
     const by = this.boss.y + Phaser.Math.Between(-15, 15);
@@ -775,7 +785,7 @@ class GameScene extends Phaser.Scene {
 
   _hitBossRocket(bullet) {
     if (!bullet.active || bullet._exploded || !this.boss) return;
-    bullet._exploded = true; bullet.destroy();
+    bullet._exploded = true; this.tweens.killTweensOf(bullet); bullet.destroy();
     // Save position BEFORE _updateBossHP() nulls this.boss
     const bx = this.boss.x, by = this.boss.y;
     this.boss.hp -= 4;
@@ -788,13 +798,19 @@ class GameScene extends Phaser.Scene {
     if (this.boss.hp <= 0) {
       this._bigExplode(this.boss.x, this.boss.y);
       this.boss.destroy(); this.boss = null;
-      this.bossHpBar.destroy(); this.bossHpBg.destroy();
-      this.eBullets.clear(true, true); // clear all enemy bullets so game doesn't freeze
+      // Stop the boss fire timer so it doesn't keep firing after death
+      if (this.bossFireTimer) { this.bossFireTimer.remove(false); this.bossFireTimer = null; }
+      // Null-guard HP bar (could already be gone in edge cases)
+      if (this.bossHpBar) { this.bossHpBar.destroy(); this.bossHpBar = null; }
+      if (this.bossHpBg)  { this.bossHpBg.destroy();  this.bossHpBg  = null; }
+      // Kill tweens BEFORE clearing — destroyed objects with running tweens crash the tween manager
+      this.eBullets.getChildren().forEach(b => this.tweens.killTweensOf(b));
+      this.eBullets.clear(true, true);
       this.score += 200; this.sessionTokens += 50;
       this.scoreTxt.setText('Score: ' + this.score);
       this.tokenTxt.setText(`Tokens: ${getTokens() + this.sessionTokens}`);
     } else {
-      this.bossHpBar.width = 200 * (this.boss.hp / this.boss.maxHp);
+      if (this.bossHpBar) this.bossHpBar.width = 200 * (this.boss.hp / this.boss.maxHp);
     }
   }
 
