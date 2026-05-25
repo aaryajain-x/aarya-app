@@ -410,6 +410,7 @@ class GameScene extends Phaser.Scene {
     this.starfield = this.add.tileSprite(0, 0, W, H, 'starfield').setOrigin(0, 0).setDepth(0);
 
     const cfg = getScaledConfig(this.currentLevel, this.wave);
+    this.levelCfg = cfg;   // store so _spawnBoss can read it
 
     this._buildPlayer();
     this.bullets  = this.add.group();
@@ -417,6 +418,7 @@ class GameScene extends Phaser.Scene {
     this.enemies  = this.add.group();
     this._spawnEnemies(cfg);
     this.boss = null;
+    this._activeExplosions = 0;
     if (cfg.boss) this._spawnBoss();
 
     this._buildHUD();
@@ -595,7 +597,9 @@ class GameScene extends Phaser.Scene {
     this.bossHpBg  = this.add.rectangle(W/2, 28, 200, 14, 0x440000).setDepth(9);
     this.bossHpBar = this.add.rectangle(W/2, 28, 200, 14, 0xff0000).setDepth(10);
     this.add.text(W/2, 28, 'BOSS', { fontSize: '10px', fill: '#fff', fontFamily: 'Arial' }).setOrigin(0.5).setDepth(11);
-    this.time.addEvent({ delay: 600, callback: this._bossFire, callbackScope: this, loop: true });
+    // Fire rate scales with level — level 10 ≈ 2500ms, level 100 ≈ 900ms
+    const bossFireDelay = Math.max(900, Math.round(this.levelCfg.shootRate * 0.55));
+    this.time.addEvent({ delay: bossFireDelay, callback: this._bossFire, callbackScope: this, loop: true });
   }
 
   _buildHUD() {
@@ -697,6 +701,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _enemyFire() {
+    if (this.eBullets.getLength() >= 10) return; // hard cap — prevents pile-up
     const alive = this.enemies.getChildren();
     if (!alive.length) return;
     const e = alive[Phaser.Math.Between(0, alive.length - 1)];
@@ -705,6 +710,7 @@ class GameScene extends Phaser.Scene {
 
   _bossFire() {
     if (!this.boss || !this.boss.active) return;
+    if (this.eBullets.getLength() >= 10) return; // cap during boss fight too
     this._spawnEBullet(this.boss.x,      this.boss.y + 36, 260, 0);
     this._spawnEBullet(this.boss.x - 22, this.boss.y + 30, 240, -80);
     this._spawnEBullet(this.boss.x + 22, this.boss.y + 30, 240,  80);
@@ -778,6 +784,7 @@ class GameScene extends Phaser.Scene {
       this._bigExplode(this.boss.x, this.boss.y);
       this.boss.destroy(); this.boss = null;
       this.bossHpBar.destroy(); this.bossHpBg.destroy();
+      this.eBullets.clear(true, true); // clear all enemy bullets so game doesn't freeze
       this.score += 200; this.sessionTokens += 50;
       this.scoreTxt.setText('Score: ' + this.score);
       this.tokenTxt.setText(`Tokens: ${getTokens() + this.sessionTokens}`);
@@ -806,9 +813,13 @@ class GameScene extends Phaser.Scene {
   }
 
   _explode(x, y, color) {
+    if (this._activeExplosions >= 6) return; // cap to prevent freeze
+    this._activeExplosions++;
     const g = this.add.graphics();
     g.fillStyle(color, 0.9); g.fillCircle(x, y, 16);
-    this.tweens.add({ targets: g, alpha: 0, scaleX: 2.5, scaleY: 2.5, duration: 320, onComplete: () => g.destroy() });
+    this.tweens.add({ targets: g, alpha: 0, scaleX: 2.5, scaleY: 2.5, duration: 300,
+      onComplete: () => { g.destroy(); this._activeExplosions = Math.max(0, this._activeExplosions - 1); }
+    });
   }
 
   _bigExplode(x, y) {
