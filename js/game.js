@@ -761,21 +761,26 @@ class GameScene extends Phaser.Scene {
   }
 
   _hitBoss(bullet) {
-    if (!bullet.active) return;
+    if (!bullet.active || !this.boss) return;
     if (!bullet.pierce) bullet.destroy();
+    // Save position BEFORE _updateBossHP() — it may null out this.boss
+    const bx = this.boss.x + Phaser.Math.Between(-25, 25);
+    const by = this.boss.y + Phaser.Math.Between(-15, 15);
     this.score += 5;
     this.boss.hp--;
     this._updateBossHP();
-    this._explode(this.boss.x + Phaser.Math.Between(-25, 25), this.boss.y + Phaser.Math.Between(-15, 15), 0xff4400);
+    this._explode(bx, by, 0xff4400); // safe — no longer touches this.boss
     this.scoreTxt.setText('Score: ' + this.score);
   }
 
   _hitBossRocket(bullet) {
-    if (!bullet.active || bullet._exploded) return;
+    if (!bullet.active || bullet._exploded || !this.boss) return;
     bullet._exploded = true; bullet.destroy();
+    // Save position BEFORE _updateBossHP() nulls this.boss
+    const bx = this.boss.x, by = this.boss.y;
     this.boss.hp -= 4;
     this._updateBossHP();
-    this._bigExplode(this.boss.x, this.boss.y);
+    this._bigExplode(bx, by); // safe
   }
 
   _updateBossHP() {
