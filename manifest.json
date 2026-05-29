@@ -4,9 +4,11 @@
   "description": "Space shooter game with 100 levels, guns and upgrades",
   "start_url": "./index.html",
   "display": "fullscreen",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#000011",
   "theme_color": "#000011",
+  "categories": ["games", "entertainment"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "icons/icon-192.png",

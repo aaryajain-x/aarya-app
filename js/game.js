@@ -433,9 +433,14 @@ class GameScene extends Phaser.Scene {
       }
     });
 
-    // Touch/drag movement
-    this.input.on('pointermove', p => { if (p.isDown && this.player) this.player.x = Phaser.Math.Clamp(p.x, 22, W - 22); });
+    // Touch / mouse movement — no button hold required so laptop mouse tracking works
+    this.input.on('pointermove', p => { if (this.player) this.player.x = Phaser.Math.Clamp(p.x, 22, W - 22); });
     this.input.on('pointerdown', p => { if (this.player) this.player.x = Phaser.Math.Clamp(p.x, 22, W - 22); });
+
+    // Keyboard controls — arrow keys + WASD (laptop / tablet with keyboard)
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.kA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+    this.kD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
 
     // Pause shortcuts
     this.input.keyboard.on('keydown-ESC', () => this._togglePause());
@@ -456,6 +461,15 @@ class GameScene extends Phaser.Scene {
 
   update(_, delta) {
     if (this.isPaused) return;
+
+    // Keyboard movement — smooth, frame-rate-independent (laptop / desktop / tablet+KB)
+    if (this.player && this.cursors) {
+      const spd = (delta / 16.67) * 5 * (localStorage.getItem('speedBoost') === '1' ? 1.35 : 1);
+      if (this.cursors.left.isDown  || this.kA.isDown)
+        this.player.x = Phaser.Math.Clamp(this.player.x - spd, 22, W - 22);
+      if (this.cursors.right.isDown || this.kD.isDown)
+        this.player.x = Phaser.Math.Clamp(this.player.x + spd, 22, W - 22);
+    }
 
     // Scroll star tile sprite (one call vs 100 draw calls)
     this.starfield.tilePositionY -= 0.9;
@@ -992,6 +1006,11 @@ new Phaser.Game({
   width: W, height: H,
   backgroundColor: '#000011',
   scene: [MenuScene, LevelSelectScene, GunShopScene, ShopScene, GameScene, GameOverScene],
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    // Fill the full screen on phones, tablets, and laptops
+    fullscreenTarget: document.body,
+  },
   parent: document.body,
 });

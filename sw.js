@@ -1,4 +1,4 @@
-const CACHE = 'space-shooter-v1';
+const CACHE = 'space-shooter-v3';
 const ASSETS = [
   './index.html',
   './js/game.js',
